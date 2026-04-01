@@ -7,12 +7,55 @@
     <link rel="stylesheet" href="/Frontend/style.css">
     <script src="/Frontend/scripts.js" defer></script>
     <title>Add Supplier</title>
+    <style>
+    form {
+        background: grey;
+        display: flex;
+        flex-direction: column;
+        width: 500px;
+        margin: 20px auto;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    label {
+        margin-top: 10px;
+        font-weight: bold;
+        color: blue;
+    }
+    </style>
 </head>
 <header>
     <h1>M.U.C</h1>
     <p>"Buy, Sell, Repair"</p>
 </header>
 <body>
+    
+    <form action="/addSupplier" method="post">
+
+    <!-- Supplier Name -->
+    <label for="supplierName">Supplier Name:</label>
+    <input type="text" id="supplierName" name="supplierName" required>
+
+    <!-- Email -->
+    <label for="email">Email:</label>
+    <input type="email" id="email" name="email" required>
+
+    <!-- Telephone Numbers (multiple allowed) -->
+    <label for="phone1">Phone Number 1:</label>
+    <input type="text" id="phone1" name="phoneNumbers[]" required>
+
+    <label for="phone2">Phone Number 2 (optional):</label>
+    <input type="text" id="phone2" name="phoneNumbers[]">
+
+    <!-- Optional: Add more dynamically later -->
+    <button type="button" onclick="addPhone()">Add Another Phone</button>
+    <div id="extraPhones"></div>
+    
+    <button type="submit">Add Supplier</button>
+
+</form>
+    
 </body>
 <footer>
     <p>Contact us:</p>
