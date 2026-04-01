@@ -3,7 +3,7 @@
 window.addEventListener("DOMContentLoaded", () => {
     //Only prompt for credentials if we do not have them.
     if (sessionStorage.getItem('credentialsReceived') === 'true') {
-        return;
+        document.getElementById("dbModal").style.display = "none";
     } else {
         //Make the popup appear and get the form
         document.getElementById("dbModal").style.display = "flex";
