@@ -60,3 +60,14 @@ function calculateExpenses(){
 function budgetProjection(){
 
 }
+
+function addPhone() {
+    const container = document.getElementById('extraPhones');
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = 'phoneNumbers[]';
+    input.placeholder = 'Additional phone';
+
+    container.appendChild(input);
+}
