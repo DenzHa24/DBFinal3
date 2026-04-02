@@ -1,225 +1,230 @@
-//username = root
-//password = my password
-//database = dbfinal
 const express = require('express');
+const mysql = require('mysql2/promise');
+const cors = require('cors');
+const path = require('path');
+
 const app = express();
-app.use(express.json());
 const port = 3000;
 
+app.use(cors());
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const mysql = require('mysql2');
-const cors = require("cors");
-app.use(cors());
+const projectRoot = path.join(__dirname, '..');
+app.use('/Frontend', express.static(path.join(projectRoot, 'Frontend')));
+app.use('/Resources', express.static(path.join(projectRoot, 'Resources')));
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(projectRoot, 'Frontend', 'index.html'));
+});
 
+let dbConfig = null;
 
+function hasDbConfig() {
+  return !!(dbConfig && dbConfig.user && dbConfig.database);
+}
 
-//Initialize variables for future
-let username;
-let password;
-let database;
+async function withConnection(handler, res) {
+  if (!hasDbConfig()) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Database is not connected. Please connect first.'
+    });
+  }
 
+  let connection;
+  try {
+    connection = await mysql.createConnection(dbConfig);
+    return await handler(connection);
+  } catch (err) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  } finally {
+    if (connection) await connection.end();
+  }
+}
 
+app.post('/api/connect-db', async (req, res) => {
+  const { username, password, database } = req.body;
 
-//STARTING THE SERVER -------------------------------------------------------------------------------------------------
-app.get('/', (req, res) => {
-    res.send('Hello World!');
+  if (!username || !database) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'username and database are required.'
+    });
+  }
+
+  const candidateConfig = {
+    host: 'localhost',
+    user: username,
+    password: password || '',
+    database
+  };
+
+  try {
+    const connection = await mysql.createConnection(candidateConfig);
+    await connection.ping();
+    await connection.end();
+
+    dbConfig = candidateConfig;
+    return res.json({ status: 'success', message: 'Connected to MySQL.' });
+  } catch (err) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.post('/api/getTable', async (req, res) => {
+  const table = (req.body.table || req.body.tableName || '').trim();
+
+  if (!table || !/^[a-zA-Z0-9_]+$/.test(table)) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Invalid table name.'
+    });
+  }
+
+  return withConnection(async (connection) => {
+    const [results, fields] = await connection.query(`SELECT * FROM \`${table}\``);
+    return res.json({
+      status: 'success',
+      rows: results.length,
+      columns: fields.length,
+      data: results
+    });
+  }, res);
+});
+
+app.post('/api/addSupplier', async (req, res) => {
+  const supplierName = (req.body.supplierName || '').trim();
+  const email = (req.body.email || '').trim();
+  let phoneNumbers = req.body.phoneNumbers || req.body['phoneNumbers[]'] || [];
+
+  if (!Array.isArray(phoneNumbers)) {
+    phoneNumbers = [phoneNumbers];
+  }
+
+  const cleanedPhones = [...new Set(phoneNumbers.map((p) => String(p).trim()).filter(Boolean))];
+
+  if (!supplierName || !email || cleanedPhones.length === 0) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'supplierName, email, and at least one phone number are required.'
+    });
+  }
+
+  return withConnection(async (connection) => {
+    await connection.beginTransaction();
+
+    try {
+      const [[nextIdRow]] = await connection.query(
+        'SELECT COALESCE(MAX(_id), 0) + 1 AS nextId FROM suppliers'
+      );
+      const newSupplierId = nextIdRow.nextId;
+
+      await connection.query(
+        'INSERT INTO suppliers (_id, name, email) VALUES (?, ?, ?)',
+        [newSupplierId, supplierName, email]
+      );
+
+      const phoneValues = cleanedPhones.map((number) => [newSupplierId, number]);
+      await connection.query('INSERT INTO phones (supp_id, number) VALUES ?', [phoneValues]);
+
+      await connection.commit();
+      return res.json({
+        status: 'success',
+        message: 'Supplier added successfully.',
+        supplierId: newSupplierId
+      });
+    } catch (err) {
+      await connection.rollback();
+
+      if (err.code === 'ER_DUP_ENTRY') {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Supplier email or phone number already exists.'
+        });
+      }
+
+      return res.status(500).json({ status: 'error', message: err.message });
+    }
+  }, res);
+});
+
+app.post('/api/annualExpenses', async (req, res) => {
+  const startYear = Number(req.body.startYear);
+  const endYear = Number(req.body.endYear);
+
+  if (!Number.isInteger(startYear) || !Number.isInteger(endYear) || startYear > endYear) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'startYear and endYear must be valid integers, and startYear <= endYear.'
+    });
+  }
+
+  return withConnection(async (connection) => {
+    const [rows] = await connection.query(
+      `SELECT YEAR(o.\`when\`) AS year,
+              ROUND(COALESCE(SUM(oi.qty * p.price), 0), 2) AS totalSpent
+       FROM orders o
+       JOIN order_items oi ON oi.supp_id = o.supp_id AND oi.\`when\` = o.\`when\`
+       JOIN parts p ON p._id = oi.part_id
+       WHERE YEAR(o.\`when\`) BETWEEN ? AND ?
+       GROUP BY YEAR(o.\`when\`)
+       ORDER BY year`,
+      [startYear, endYear]
+    );
+
+    const expenseByYear = new Map(rows.map((r) => [r.year, Number(r.totalSpent)]));
+    const data = [];
+    for (let year = startYear; year <= endYear; year += 1) {
+      data.push({ year, totalSpent: expenseByYear.get(year) || 0 });
+    }
+
+    return res.json({ status: 'success', data });
+  }, res);
+});
+
+app.post('/api/budgetProjection', async (req, res) => {
+  const numYears = Number(req.body.numYears);
+  const inflationRate = Number(req.body.inflationRate);
+
+  if (!Number.isInteger(numYears) || numYears < 1 || !Number.isFinite(inflationRate) || inflationRate < 0) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'numYears must be an integer >= 1 and inflationRate must be a number >= 0.'
+    });
+  }
+
+  return withConnection(async (connection) => {
+    const baseYear = 2022;
+    const [[row]] = await connection.query(
+      `SELECT ROUND(COALESCE(SUM(oi.qty * p.price), 0), 2) AS totalSpent
+       FROM orders o
+       JOIN order_items oi ON oi.supp_id = o.supp_id AND oi.\`when\` = o.\`when\`
+       JOIN parts p ON p._id = oi.part_id
+       WHERE YEAR(o.\`when\`) = ?`,
+      [baseYear]
+    );
+
+    const baseAmount = Number(row.totalSpent || 0);
+    const growth = 1 + inflationRate / 100;
+    const data = [];
+
+    for (let i = 1; i <= numYears; i += 1) {
+      data.push({
+        year: baseYear + i,
+        projectedTotal: Number((baseAmount * growth ** i).toFixed(2))
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      baseYear,
+      baseAmount,
+      inflationRate,
+      data
+    });
+  }, res);
 });
 
 app.listen(port, () => {
-    console.log(`App listening at http://localhost:${port}`);
+  console.log(`App listening at http://localhost:${port}`);
 });
-//STARTING THE SERVER -------------------------------------------------------------------------------------------------
-
-
-//Endpoint to provide values for username, password and database to be used in the future -----------------------------
-app.post("/api/connect-db", async (req, res) => {
-    console.log("RAW BODY:", req.body);
-    const { username, password, database } = req.body;
-
-    try {
-        // connect then close connection
-        const connection = mysql.createConnection({
-            host: "localhost",
-            user: username,
-            password: password,
-            database: database
-        });
-        res.json({ status: "success", message: "Connected to MySQL!" });
-
-        await connection.end();
-
-    } catch (err) {
-        res.status(500).json({ status: "error", message: err.message });
-    }
-});
-//Endpoint to provide values for username, password and database to be used in the future -----------------------------
-
-
-//Endpoint to get a table ---------------------------------------------------------------------------------------------
-app.post("/api/getTable", async (req, res) => {
-
-    const { table } = req.body;
-
-    //Prevent tables from getting nuked
-    if (!table || !/^[a-zA-Z0-9_]+$/.test(table)) {
-        return res.status(400).json({
-            status: "error",
-            message: "Invalid table name"
-        });
-    }
-
-    const connection = mysql.createConnection({
-        host: "localhost",
-        user: username,
-        password: password,
-        database: database
-    });
-
-    const sql = `SELECT * FROM \`${table}\``;
-
-    connection.query(sql, function (err, results, fields) {
-        if (err) {
-            connection.end();
-            return res.status(500).json({
-                status: "error",
-                message: err.message
-            });
-        }
-
-        const rowCount = results.length;      // number of rows
-        const colCount = fields.length;       // number of columns
-
-        res.json({
-            status: "success",
-            rows: rowCount,
-            columns: colCount,
-            data: results
-        });
-    });
-
-});
-//Endpoint to get a table ---------------------------------------------------------------------------------------------
-
-
-
-
-
-app.post('/addSupplier', (req, res) => {
-    const supplierName = req.body.supplierName?.trim();
-    const email = req.body.email?.trim();
-
-    let phoneNumbers = req.body.phoneNumbers || [];
-
-    // Ensure phoneNumbers is always an array
-    if (!Array.isArray(phoneNumbers)) {
-        phoneNumbers = [phoneNumbers];
-    }
-
-    // Trim and remove empty values
-    phoneNumbers = phoneNumbers
-        .map(phone => String(phone).trim())
-        .filter(phone => phone !== '');
-
-    // Basic validation
-    if (!supplierName || !email || phoneNumbers.length === 0) {
-        return res.status(400).send('Error: supplier name, email, and at least one phone number are required.');
-    }
-
-    // Optional: prevent duplicate phone numbers in the same submission
-    const uniquePhones = [...new Set(phoneNumbers)];
-    if (uniquePhones.length !== phoneNumbers.length) {
-        return res.status(400).send('Error: duplicate phone numbers were entered in the form.');
-    }
-
-    // Start transaction so inserts stay consistent
-    db.beginTransaction((err) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).send('Database error: could not start transaction.');
-        }
-
-        const insertSupplierSQL = `
-            INSERT INTO SUPPLIERS (Name, Email)
-            VALUES (?, ?)
-        `;
-
-        db.query(insertSupplierSQL, [supplierName, email], (err, supplierResult) => {
-            if (err) {
-                return db.rollback(() => {
-                    console.error(err);
-
-                    if (err.code === 'ER_DUP_ENTRY') {
-                        return res.status(400).send('Error: that supplier email already exists.');
-                    }
-
-                    return res.status(500).send('Database error: could not add supplier.');
-                });
-            }
-
-            const supplierID = supplierResult.insertId;
-
-            const phoneValues = phoneNumbers.map(phone => [phone, supplierID]);
-
-            const insertPhonesSQL = `
-                INSERT INTO PHONE_NUMBERS (PhoneNumber, SupplierID)
-                VALUES ?
-            `;
-
-            db.query(insertPhonesSQL, [phoneValues], (err) => {
-                if (err) {
-                    return db.rollback(() => {
-                        console.error(err);
-
-                        if (err.code === 'ER_DUP_ENTRY') {
-                            return res.status(400).send('Error: one of the phone numbers already exists.');
-                        }
-
-                        if (err.code === 'ER_NO_REFERENCED_ROW_2') {
-                            return res.status(400).send('Error: invalid supplier reference.');
-                        }
-
-                        return res.status(500).send('Database error: could not add phone numbers.');
-                    });
-                }
-
-                db.commit((err) => {
-                    if (err) {
-                        return db.rollback(() => {
-                            console.error(err);
-                            return res.status(500).send('Database error: could not commit transaction.');
-                        });
-                    }
-
-                    res.send('Supplier added successfully.');
-                });
-            });
-        });
-    });
-});
-
-/*
-app.post("/api/addNewSupplier", async (req, res) => {
-    const { table, values } = req.body;
-
-    try {
-
-        // Build SQL dynamically but safely
-        const columns = Object.keys(values);
-        const placeholders = columns.map(() => "?").join(", ");
-        const sql = `INSERT INTO \`${table}\` (${columns.join(", ")}) VALUES (${placeholders})`;
-
-        connection.query(sql, Object.values(values), (err, result) => {
-            if (err) throw err;
-
-            res.json({
-                status: "success",
-                insertedId: result.insertId
-            });
-        });
-
-    } catch (err) {
-        res.status(500).json({ status: "error", message: err.message });
-    }
-});
-*/
