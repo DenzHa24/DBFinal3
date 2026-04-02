@@ -1,10 +1,12 @@
 //username = root
 //password = my password
-//hostname = 127.0.0.1
+//database = dbfinal
 const express = require('express');
 const app = express();
 app.use(express.json());
 const port = 3000;
+
+app.use(express.urlencoded({ extended: true }));
 
 const mysql = require('mysql2');
 const cors = require("cors");
@@ -32,9 +34,8 @@ app.listen(port, () => {
 
 //Endpoint to provide values for username, password and database to be used in the future -----------------------------
 app.post("/api/connect-db", async (req, res) => {
-    username = req.user;
-    password = req.password;
-    database = req.database;
+    console.log("RAW BODY:", req.body);
+    const { username, password, database } = req.body;
 
     try {
         // connect then close connection
@@ -44,14 +45,16 @@ app.post("/api/connect-db", async (req, res) => {
             password: password,
             database: database
         });
-        await connection.end();
         res.json({ status: "success", message: "Connected to MySQL!" });
+
+        await connection.end();
 
     } catch (err) {
         res.status(500).json({ status: "error", message: err.message });
     }
 });
 //Endpoint to provide values for username, password and database to be used in the future -----------------------------
+
 
 //Endpoint to get a table ---------------------------------------------------------------------------------------------
 app.post("/api/getTable", async (req, res) => {

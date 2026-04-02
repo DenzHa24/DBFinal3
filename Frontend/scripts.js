@@ -14,6 +14,7 @@ window.addEventListener("DOMContentLoaded", () => {
             e.preventDefault();
 
             const dbCredentials = Object.fromEntries(new FormData(form));
+            console.log(dbCredentials);
 
             try {
                 const res = await fetch("http://localhost:3000/api/connect-db", {
