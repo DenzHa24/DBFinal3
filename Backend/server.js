@@ -1,28 +1,33 @@
 /**
- * DB Final Web App Backend
- *
- * This server provides API routes for the four required project operations:
- * 1) Show table
- * 2) Add supplier
- * 3) Annual expenses for parts
- * 4) Budget projection
- *
- * It also serves static frontend files so the project can be run from one Node process.
+ * Server.js
+ * 
+  Serves as project backend and has endpoints for:
+  1) Collecting user data
+  2) Showing tables 
+  3) Adding suppliers
+  4) Annual expenses for parts
+  5) Budget projections
  */
+
+//Imports
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const path = require('path');
 
+//App setup
 const app = express();
 const port = 3000;
 
-// Middleware for JSON/form parsing + CORS for local frontend requests.
+/*Additional aid:
+  CORS usage (So that we aren't blocked)
+  JSON parsing (for talking to the front end)
+*/
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve frontend/assets from project root.
+// Serve frontend/assets from the backend
 const projectRoot = path.join(__dirname, '..');
 app.use('/Frontend', express.static(path.join(projectRoot, 'Frontend')));
 app.use('/Resources', express.static(path.join(projectRoot, 'Resources')));
@@ -31,28 +36,20 @@ app.get('/', (_req, res) => {
   res.sendFile(path.join(projectRoot, 'Frontend', 'index.html'));
 });
 
-/**
- * In-memory DB config set by /api/connect-db.
- *
- * NOTE: This is intentionally simple for class/demo usage.
- * For production, use environment variables or a secure secret store.
- */
+
+
+// /api/connect-db sets memory for user info
+// Used for memory on user sign-in
 let dbConfig = null;
 
-/**
- * @returns {boolean} true if db credentials were provided and validated.
- */
+//FUnction to make sure credentials exist and are valid
 function hasDbConfig() {
   return !!(dbConfig && dbConfig.user && dbConfig.database);
 }
 
-/**
- * Helper wrapper that creates and closes a DB connection per request.
- *
- * @param {(connection: import('mysql2/promise').Connection) => Promise<void>} handler
- * @param {import('express').Response} res
- */
+//Function creates and closes DB connections by request
 async function withConnection(handler, res) {
+  //Error if not signed in
   if (!hasDbConfig()) {
     return res.status(400).json({
       status: 'error',
@@ -71,8 +68,8 @@ async function withConnection(handler, res) {
   }
 }
 
-/**
- * POST /api/connect-db
+/*
+ * ENDPOINT 1
  * Validates DB credentials and stores them for subsequent requests.
  */
 app.post('/api/connect-db', async (req, res) => {
@@ -105,14 +102,14 @@ app.post('/api/connect-db', async (req, res) => {
 });
 
 /**
- * POST /api/getTable
- * Body: { tableName: string } or { table: string }
- * Returns all rows from the selected table.
+ * ENDPOINT 2
+ * Returns selected table.
  */
 app.post('/api/getTable', async (req, res) => {
+  //Pulls table name out of request
   const table = (req.body.table || req.body.tableName || '').trim();
 
-  // Simple allow-list style validation to prevent SQL injection via table name.
+  // Prevents DB from being nuked!
   if (!table || !/^[a-zA-Z0-9_]+$/.test(table)) {
     return res.status(400).json({
       status: 'error',
@@ -120,10 +117,13 @@ app.post('/api/getTable', async (req, res) => {
     });
   }
 
+  //Fetches and returns information
   return withConnection(async (connection) => {
+    //Select the table
     const [results, fields] = await connection.query(`SELECT * FROM \`${table}\``);
     return res.json({
       status: 'success',
+      //lengths for building the table
       rows: results.length,
       columns: fields.length,
       data: results
@@ -132,8 +132,7 @@ app.post('/api/getTable', async (req, res) => {
 });
 
 /**
- * POST /api/addSupplier
- * Body: { supplierName, email, phoneNumbers[] }
+ * ENDPOINT 3
  * Inserts into suppliers + phones in a single transaction.
  */
 app.post('/api/addSupplier', async (req, res) => {
@@ -195,8 +194,7 @@ app.post('/api/addSupplier', async (req, res) => {
 });
 
 /**
- * POST /api/annualExpenses
- * Body: { startYear, endYear }
+ * ENDPOINT 4
  * Returns expense total per year for the selected range.
  */
 app.post('/api/annualExpenses', async (req, res) => {
@@ -235,8 +233,7 @@ app.post('/api/annualExpenses', async (req, res) => {
 });
 
 /**
- * POST /api/budgetProjection
- * Body: { numYears, inflationRate }
+ * ENDPOINT 5
  * Uses 2022 as baseline year and applies compound inflation for N future years.
  */
 app.post('/api/budgetProjection', async (req, res) => {
@@ -282,6 +279,7 @@ app.post('/api/budgetProjection', async (req, res) => {
   }, res);
 });
 
+//Hosts the app for access from the front end
 app.listen(port, () => {
   console.log(`App listening at http://localhost:${port}`);
 });

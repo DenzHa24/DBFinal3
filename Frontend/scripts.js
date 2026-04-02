@@ -87,6 +87,7 @@ function checkTable() {
   const form = document.getElementById('table-display');
   if (!form) return;
 
+  //Button clicked
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = Object.fromEntries(new FormData(form));
