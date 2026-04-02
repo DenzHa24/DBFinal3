@@ -1,3 +1,7 @@
+/**
+ * Shared status message helper for all pages.
+ * Pages that want messages should include <p id="result"></p>.
+ */
 function setResult(message, isError = false) {
   const result = document.getElementById('result');
   if (!result) return;
@@ -5,6 +9,11 @@ function setResult(message, isError = false) {
   result.style.color = isError ? '#b91c1c' : '#064e3b';
 }
 
+/**
+ * Build an HTML table from an array of objects.
+ * @param {Array<Record<string, unknown>>} data
+ * @returns {HTMLTableElement}
+ */
 function createTable(data) {
   const table = document.createElement('table');
 
@@ -43,6 +52,9 @@ function createTable(data) {
   return table;
 }
 
+/**
+ * Small fetch wrapper that posts JSON and normalizes error handling.
+ */
 async function postJson(url, payload) {
   const response = await fetch(url, {
     method: 'POST',
@@ -58,6 +70,9 @@ async function postJson(url, payload) {
   return data;
 }
 
+/**
+ * Connect DB modal form handler.
+ */
 async function connectDb(form) {
   const dbCredentials = Object.fromEntries(new FormData(form));
   await postJson('http://localhost:3000/api/connect-db', dbCredentials);
@@ -65,6 +80,9 @@ async function connectDb(form) {
   document.getElementById('dbModal').style.display = 'none';
 }
 
+/**
+ * Show table page handler.
+ */
 function checkTable() {
   const form = document.getElementById('table-display');
   if (!form) return;
@@ -85,6 +103,9 @@ function checkTable() {
   });
 }
 
+/**
+ * Add supplier page handler.
+ */
 function addSupplier() {
   const form = document.getElementById('supplier-form');
   if (!form) return;
@@ -110,6 +131,9 @@ function addSupplier() {
   });
 }
 
+/**
+ * Annual expenses page handler.
+ */
 function calculateExpenses() {
   const form = document.getElementById('annual-expenses-form');
   if (!form) return;
@@ -130,6 +154,9 @@ function calculateExpenses() {
   });
 }
 
+/**
+ * Budget projection page handler.
+ */
 function budgetProjection() {
   const form = document.getElementById('budget-projection-form');
   if (!form) return;
@@ -152,6 +179,9 @@ function budgetProjection() {
   });
 }
 
+/**
+ * Dynamically append another phone input on Add Supplier page.
+ */
 function addPhone() {
   const container = document.getElementById('extraPhones');
   if (!container) return;
@@ -163,6 +193,11 @@ function addPhone() {
   container.appendChild(input);
 }
 
+/**
+ * Page bootstrap:
+ * - handle DB modal if present (index page)
+ * - register handlers for whichever form exists on current page
+ */
 window.addEventListener('DOMContentLoaded', () => {
   const modal = document.getElementById('dbModal');
   const form = document.getElementById('dbForm');

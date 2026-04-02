@@ -1,3 +1,14 @@
+/**
+ * DB Final Web App Backend
+ *
+ * This server provides API routes for the four required project operations:
+ * 1) Show table
+ * 2) Add supplier
+ * 3) Annual expenses for parts
+ * 4) Budget projection
+ *
+ * It also serves static frontend files so the project can be run from one Node process.
+ */
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
@@ -6,23 +17,41 @@ const path = require('path');
 const app = express();
 const port = 3000;
 
+// Middleware for JSON/form parsing + CORS for local frontend requests.
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve frontend/assets from project root.
 const projectRoot = path.join(__dirname, '..');
 app.use('/Frontend', express.static(path.join(projectRoot, 'Frontend')));
 app.use('/Resources', express.static(path.join(projectRoot, 'Resources')));
+
 app.get('/', (_req, res) => {
   res.sendFile(path.join(projectRoot, 'Frontend', 'index.html'));
 });
 
+/**
+ * In-memory DB config set by /api/connect-db.
+ *
+ * NOTE: This is intentionally simple for class/demo usage.
+ * For production, use environment variables or a secure secret store.
+ */
 let dbConfig = null;
 
+/**
+ * @returns {boolean} true if db credentials were provided and validated.
+ */
 function hasDbConfig() {
   return !!(dbConfig && dbConfig.user && dbConfig.database);
 }
 
+/**
+ * Helper wrapper that creates and closes a DB connection per request.
+ *
+ * @param {(connection: import('mysql2/promise').Connection) => Promise<void>} handler
+ * @param {import('express').Response} res
+ */
 async function withConnection(handler, res) {
   if (!hasDbConfig()) {
     return res.status(400).json({
@@ -42,6 +71,10 @@ async function withConnection(handler, res) {
   }
 }
 
+/**
+ * POST /api/connect-db
+ * Validates DB credentials and stores them for subsequent requests.
+ */
 app.post('/api/connect-db', async (req, res) => {
   const { username, password, database } = req.body;
 
@@ -71,9 +104,15 @@ app.post('/api/connect-db', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/getTable
+ * Body: { tableName: string } or { table: string }
+ * Returns all rows from the selected table.
+ */
 app.post('/api/getTable', async (req, res) => {
   const table = (req.body.table || req.body.tableName || '').trim();
 
+  // Simple allow-list style validation to prevent SQL injection via table name.
   if (!table || !/^[a-zA-Z0-9_]+$/.test(table)) {
     return res.status(400).json({
       status: 'error',
@@ -92,6 +131,11 @@ app.post('/api/getTable', async (req, res) => {
   }, res);
 });
 
+/**
+ * POST /api/addSupplier
+ * Body: { supplierName, email, phoneNumbers[] }
+ * Inserts into suppliers + phones in a single transaction.
+ */
 app.post('/api/addSupplier', async (req, res) => {
   const supplierName = (req.body.supplierName || '').trim();
   const email = (req.body.email || '').trim();
@@ -101,6 +145,7 @@ app.post('/api/addSupplier', async (req, res) => {
     phoneNumbers = [phoneNumbers];
   }
 
+  // Trim numbers, remove empty strings, and deduplicate values.
   const cleanedPhones = [...new Set(phoneNumbers.map((p) => String(p).trim()).filter(Boolean))];
 
   if (!supplierName || !email || cleanedPhones.length === 0) {
@@ -114,6 +159,7 @@ app.post('/api/addSupplier', async (req, res) => {
     await connection.beginTransaction();
 
     try {
+      // suppliers._id is non-auto-increment in this schema, so generate next ID.
       const [[nextIdRow]] = await connection.query(
         'SELECT COALESCE(MAX(_id), 0) + 1 AS nextId FROM suppliers'
       );
@@ -148,6 +194,11 @@ app.post('/api/addSupplier', async (req, res) => {
   }, res);
 });
 
+/**
+ * POST /api/annualExpenses
+ * Body: { startYear, endYear }
+ * Returns expense total per year for the selected range.
+ */
 app.post('/api/annualExpenses', async (req, res) => {
   const startYear = Number(req.body.startYear);
   const endYear = Number(req.body.endYear);
@@ -172,6 +223,7 @@ app.post('/api/annualExpenses', async (req, res) => {
       [startYear, endYear]
     );
 
+    // Fill missing years with 0 to make output easier to display.
     const expenseByYear = new Map(rows.map((r) => [r.year, Number(r.totalSpent)]));
     const data = [];
     for (let year = startYear; year <= endYear; year += 1) {
@@ -182,6 +234,11 @@ app.post('/api/annualExpenses', async (req, res) => {
   }, res);
 });
 
+/**
+ * POST /api/budgetProjection
+ * Body: { numYears, inflationRate }
+ * Uses 2022 as baseline year and applies compound inflation for N future years.
+ */
 app.post('/api/budgetProjection', async (req, res) => {
   const numYears = Number(req.body.numYears);
   const inflationRate = Number(req.body.inflationRate);
