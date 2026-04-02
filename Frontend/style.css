@@ -148,3 +148,14 @@ header p {
     background-color: grey;
     border: 2px solid black;
 }
+
+#annual-expenses-form, #budget-projection-form, #supplier-form {
+    background: grey;
+    display: flex;
+    flex-direction: column;
+    width: 500px;
+    margin: 20px auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
