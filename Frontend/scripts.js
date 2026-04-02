@@ -1,143 +1,191 @@
-//On inital load, prompt for DB information, save to current tab so that
-//refreshing does not force another login
-window.addEventListener("DOMContentLoaded", () => {
-    //Only prompt for credentials if we do not have them.
-    if (sessionStorage.getItem('credentialsReceived') === 'true') {
-        document.getElementById("dbModal").style.display = "none";
-    } else {
-        //Make the popup appear and get the form
-        document.getElementById("dbModal").style.display = "flex";
-        const form = document.getElementById("dbForm");
-
-        //Form event listener
-        form.addEventListener("submit", async (e) => {
-            e.preventDefault();
-
-            const dbCredentials = Object.fromEntries(new FormData(form));
-            console.log(dbCredentials);
-
-            try {
-                const res = await fetch("http://localhost:3000/api/connect-db", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(dbCredentials)
-                });
-
-                const data = await res.json();
-                console.log("Backend response:", data);
-
-                if (data.status === "success") {
-                    document.getElementById("dbModal").style.display = "none";
-
-                    //Set session storage to true so no relogging
-                    sessionStorage.setItem('credentialsReceived', 'true');
-                } else {
-                    alert("DB connection failed");
-                }
-
-            } catch (err) {
-                console.error(err);
-                alert("Server error");
-            }
-        });
-    }
-});
-
-
-//UNTESTED
-function createTable(data) {
-    const table = document.createElement("table");
-
-    if (!data || data.length === 0) return table;
-
-    // Get columns from first object
-    const columns = Object.keys(data[0]);
-
-    // HEADER ROW
-    const headerRow = document.createElement("tr");
-
-    columns.forEach(col => {
-        const th = document.createElement("th");
-        th.textContent = col;
-        headerRow.appendChild(th);
-    });
-
-    table.appendChild(headerRow);
-
-    // DATA ROWS
-    data.forEach(rowObj => {
-        const tr = document.createElement("tr");
-
-        columns.forEach(col => {
-            const td = document.createElement("td");
-            td.textContent = rowObj[col];
-            tr.appendChild(td);
-        });
-
-        table.appendChild(tr);
-    });
-
-    return table;
+function setResult(message, isError = false) {
+  const result = document.getElementById('result');
+  if (!result) return;
+  result.textContent = message;
+  result.style.color = isError ? '#b91c1c' : '#064e3b';
 }
 
+function createTable(data) {
+  const table = document.createElement('table');
 
-//UNTESTED
-function checkTable() {
-    const form = document.getElementById("table-display");
+  if (!Array.isArray(data) || data.length === 0) {
+    const empty = document.createElement('caption');
+    empty.textContent = 'No rows found.';
+    table.appendChild(empty);
+    return table;
+  }
 
-    form.addEventListener("submit", async (e) => {
-        e.preventDefault();
+  const columns = Object.keys(data[0]);
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
 
-        const dbName = Object.fromEntries(new FormData(form));
+  columns.forEach((col) => {
+    const th = document.createElement('th');
+    th.textContent = col;
+    headerRow.appendChild(th);
+  });
 
-        try {
-            const res = await fetch("http://localhost:3000/api/getTable", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(dbName)
-            });
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
 
-            const data = await res.json();
-
-            if (data.status === "success") {
-
-                const tableData = data.data; // 👈 array of objects
-
-                const container = document.getElementById("table");
-                container.innerHTML = "";
-
-                container.appendChild(createTable(tableData));
-
-            } else {
-                alert("DB connection failed");
-            }
-
-        } catch (err) {
-            console.error(err);
-            alert("Server error");
-        }
+  const tbody = document.createElement('tbody');
+  data.forEach((rowObj) => {
+    const tr = document.createElement('tr');
+    columns.forEach((col) => {
+      const td = document.createElement('td');
+      td.textContent = rowObj[col];
+      tr.appendChild(td);
     });
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  return table;
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json();
+  if (!response.ok || data.status === 'error') {
+    throw new Error(data.message || 'Request failed');
+  }
+
+  return data;
+}
+
+async function connectDb(form) {
+  const dbCredentials = Object.fromEntries(new FormData(form));
+  await postJson('http://localhost:3000/api/connect-db', dbCredentials);
+  sessionStorage.setItem('credentialsReceived', 'true');
+  document.getElementById('dbModal').style.display = 'none';
+}
+
+function checkTable() {
+  const form = document.getElementById('table-display');
+  if (!form) return;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = Object.fromEntries(new FormData(form));
+
+    try {
+      const data = await postJson('http://localhost:3000/api/getTable', formData);
+      const container = document.getElementById('table');
+      container.innerHTML = '';
+      container.appendChild(createTable(data.data));
+      setResult(`Loaded ${data.rows} rows from ${formData.tableName}.`);
+    } catch (err) {
+      setResult(err.message, true);
+    }
+  });
 }
 
 function addSupplier() {
+  const form = document.getElementById('supplier-form');
+  if (!form) return;
 
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const formData = new FormData(form);
+    const payload = {
+      supplierName: formData.get('supplierName'),
+      email: formData.get('email'),
+      phoneNumbers: formData.getAll('phoneNumbers[]')
+    };
+
+    try {
+      const data = await postJson('http://localhost:3000/api/addSupplier', payload);
+      setResult(`${data.message} Supplier ID: ${data.supplierId}.`);
+      form.reset();
+      document.getElementById('extraPhones').innerHTML = '';
+    } catch (err) {
+      setResult(err.message, true);
+    }
+  });
 }
 
 function calculateExpenses() {
+  const form = document.getElementById('annual-expenses-form');
+  if (!form) return;
 
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(form));
+
+    try {
+      const data = await postJson('http://localhost:3000/api/annualExpenses', payload);
+      const container = document.getElementById('table');
+      container.innerHTML = '';
+      container.appendChild(createTable(data.data));
+      setResult('Annual expenses calculated successfully.');
+    } catch (err) {
+      setResult(err.message, true);
+    }
+  });
 }
 
 function budgetProjection() {
+  const form = document.getElementById('budget-projection-form');
+  if (!form) return;
 
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = Object.fromEntries(new FormData(form));
+
+    try {
+      const data = await postJson('http://localhost:3000/api/budgetProjection', payload);
+      const container = document.getElementById('table');
+      container.innerHTML = '';
+      container.appendChild(createTable(data.data));
+      setResult(
+        `Projection built from ${data.baseYear} expenses ($${data.baseAmount}) at ${data.inflationRate}% inflation.`
+      );
+    } catch (err) {
+      setResult(err.message, true);
+    }
+  });
 }
 
 function addPhone() {
-    const container = document.getElementById('extraPhones');
+  const container = document.getElementById('extraPhones');
+  if (!container) return;
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.name = 'phoneNumbers[]';
-    input.placeholder = 'Additional phone';
-
-    container.appendChild(input);
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.name = 'phoneNumbers[]';
+  input.placeholder = 'Additional phone';
+  container.appendChild(input);
 }
+
+window.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('dbModal');
+  const form = document.getElementById('dbForm');
+
+  if (modal && form) {
+    if (sessionStorage.getItem('credentialsReceived') === 'true') {
+      modal.style.display = 'none';
+    } else {
+      modal.style.display = 'flex';
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+          await connectDb(form);
+          setResult('Database connected successfully.');
+        } catch (err) {
+          setResult(err.message, true);
+        }
+      });
+    }
+  }
+
+  checkTable();
+  addSupplier();
+  calculateExpenses();
+  budgetProjection();
+});
