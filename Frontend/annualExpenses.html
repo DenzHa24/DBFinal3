@@ -26,7 +26,7 @@
 </header>
 <body>
 
-    <form action="/annualExpenses" method="post">
+    <form id="annual-expenses-form">
         <label for="startYear">Start Year:</label>
         <input type="number" id="startYear" name="startYear" required>
 
@@ -35,7 +35,9 @@
 
         <button type="submit">Show Expenses</button>
     </form>
-    
+    <div id="table"></div>
+    <p id="result"></p>
+
 </body>
 <footer>
     <p>Contact us:</p>
