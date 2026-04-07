@@ -106,50 +106,53 @@ header p {
 
 
 #table-display{
-    padding-top : 5px;
+    padding-top: 5px;
 }
-#table-div{
+
+#table{
     background-color: #2563eb;
     min-height: 50vh;
     border: 5px solid black;
     width: 80vw;
     margin-left: auto;
     margin-right: auto;
+
+    overflow-x: auto; /* prevents squishing on many columns */
 }
 
-
-#table-div table {
-    width: 99%;
+#table table {
+    width: 100%;
+    min-width: 100%;      /* ensures it doesn't shrink too much */
     background-color: whitesmoke;
     border: 2px solid black;
-    margin: auto;
+    margin: 0 auto;
+
+    border-collapse: collapse;
+    table-layout: auto;   /* lets columns size naturally */
     text-align: center;
 }
 
-#table-div tbody{
+#table th,
+#table td {
+    border: 1px solid black;
+    padding: 14px 18px;   /* fixes “thin” look */
+    text-align: center;
+    vertical-align: middle;
     background-color: whitesmoke;
-    min-height: 50vh;
 }
 
-#table-div td{
-    background-color: whitesmoke;
-}
-
-#table-div form {
-    width: 100%;
-    background-color: whitesmoke;
-    border:2px;
-    margin-bottom: 2px;
-    text-align: left;
-    min-height: 4vh;
-}
-
-#table-div thead td{
+#table thead th {
     background-color: grey;
-    border: 2px solid black;
+    color: black;
+    font-weight: bold;
 }
 
-#annual-expenses-form, #budget-projection-form, #supplier-form {
+/* optional: improves readability */
+#table tbody tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+#annual-expenses-form, #budget-projection-form, #supplier-form, #table-display-form{
     background: grey;
     display: flex;
     flex-direction: column;

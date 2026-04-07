@@ -1,15 +1,4 @@
 /**
- * Shared status message helper for all pages.
- * Pages that want messages should include <p id="result"></p>.
- */
-function setResult(message, isError = false) {
-  const result = document.getElementById('result');
-  if (!result) return;
-  result.textContent = message;
-  result.style.color = isError ? '#b91c1c' : '#064e3b';
-}
-
-/**
  * Build an HTML table from an array of objects.
  * @param {Array<Record<string, unknown>>} data
  * @returns {HTMLTableElement}
@@ -84,7 +73,7 @@ async function connectDb(form) {
  * Show table page handler.
  */
 function checkTable() {
-  const form = document.getElementById('table-display');
+  const form = document.getElementById('table-display-form');
   if (!form) return;
 
   //Button clicked
@@ -92,15 +81,10 @@ function checkTable() {
     e.preventDefault();
     const formData = Object.fromEntries(new FormData(form));
 
-    try {
       const data = await postJson('http://localhost:3000/api/getTable', formData);
       const container = document.getElementById('table');
       container.innerHTML = '';
       container.appendChild(createTable(data.data));
-      setResult(`Loaded ${data.rows} rows from ${formData.tableName}.`);
-    } catch (err) {
-      setResult(err.message, true);
-    }
   });
 }
 
@@ -121,14 +105,9 @@ function addSupplier() {
       phoneNumbers: formData.getAll('phoneNumbers[]')
     };
 
-    try {
       const data = await postJson('http://localhost:3000/api/addSupplier', payload);
-      setResult(`${data.message} Supplier ID: ${data.supplierId}.`);
       form.reset();
       document.getElementById('extraPhones').innerHTML = '';
-    } catch (err) {
-      setResult(err.message, true);
-    }
   });
 }
 
@@ -143,15 +122,10 @@ function calculateExpenses() {
     e.preventDefault();
     const payload = Object.fromEntries(new FormData(form));
 
-    try {
       const data = await postJson('http://localhost:3000/api/annualExpenses', payload);
       const container = document.getElementById('table');
       container.innerHTML = '';
       container.appendChild(createTable(data.data));
-      setResult('Annual expenses calculated successfully.');
-    } catch (err) {
-      setResult(err.message, true);
-    }
   });
 }
 
@@ -166,17 +140,10 @@ function budgetProjection() {
     e.preventDefault();
     const payload = Object.fromEntries(new FormData(form));
 
-    try {
       const data = await postJson('http://localhost:3000/api/budgetProjection', payload);
       const container = document.getElementById('table');
       container.innerHTML = '';
       container.appendChild(createTable(data.data));
-      setResult(
-        `Projection built from ${data.baseYear} expenses ($${data.baseAmount}) at ${data.inflationRate}% inflation.`
-      );
-    } catch (err) {
-      setResult(err.message, true);
-    }
   });
 }
 
@@ -210,12 +177,7 @@ window.addEventListener('DOMContentLoaded', () => {
       modal.style.display = 'flex';
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        try {
           await connectDb(form);
-          setResult('Database connected successfully.');
-        } catch (err) {
-          setResult(err.message, true);
-        }
       });
     }
   }
